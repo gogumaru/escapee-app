@@ -8,140 +8,330 @@
 
 import SwiftUI
 
-struct EventRowView: View {
+// MARK: - Agent Colors
+// Deterministik per player ID — konsisten sepanjang game
 
+struct AgentColor {
+    let bubble: Color
+    let text: Color
+    let name: Color
+    let avatar: Color
+
+    static func from(_ playerId: String?) -> AgentColor {
+        guard let id = playerId else { return .system }
+
+        let palette: [AgentColor] = [.alex, .riley, .charlie, .dana]
+        let index = abs(id.hashValue) % palette.count
+        return palette[index]
+    }
+
+    // Biru — player pertama
+    static let alex = AgentColor(
+        bubble: Color(red: 0.05, green: 0.13, blue: 0.25),
+        text:   Color(red: 0.86, green: 0.93, blue: 1.0),
+        name:   Color(red: 0.37, green: 0.51, blue: 0.98),
+        avatar: Color(red: 0.23, green: 0.38, blue: 0.62)
+    )
+    // Ungu — player kedua
+    static let riley = AgentColor(
+        bubble: Color(red: 0.10, green: 0.05, blue: 0.21),
+        text:   Color(red: 0.93, green: 0.91, blue: 1.0),
+        name:   Color(red: 0.66, green: 0.33, blue: 0.97),
+        avatar: Color(red: 0.37, green: 0.20, blue: 0.55)
+    )
+    // Teal — player ketiga
+    static let charlie = AgentColor(
+        bubble: Color(red: 0.04, green: 0.18, blue: 0.18),
+        text:   Color(red: 0.86, green: 0.97, blue: 0.97),
+        name:   Color(red: 0.20, green: 0.75, blue: 0.70),
+        avatar: Color(red: 0.10, green: 0.40, blue: 0.38)
+    )
+    // Amber — player keempat
+    static let dana = AgentColor(
+        bubble: Color(red: 0.20, green: 0.14, blue: 0.03),
+        text:   Color(red: 1.0, green: 0.95, blue: 0.86),
+        name:   Color(red: 0.90, green: 0.65, blue: 0.20),
+        avatar: Color(red: 0.50, green: 0.35, blue: 0.05)
+    )
+    // System — abu
+    static let system = AgentColor(
+        bubble: Color.white.opacity(0.05),
+        text:   Color.white.opacity(0.5),
+        name:   Color.white.opacity(0.3),
+        avatar: Color.white.opacity(0.1)
+    )
+}
+
+// MARK: - EventRowView
+
+struct EventRowView: View {
     let event: GameEvent
 
+    // Tentukan apakah bubble ini dari "kanan" (player genap)
+    private var isRight: Bool {
+        guard let id = event.player else { return false }
+        let index = abs(id.hashValue) % 2
+        return index == 1
+    }
+
+    private var agentColor: AgentColor {
+        .from(event.player)
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        Group {
+            switch event.kind {
+            case .narration:
+                NarratorRow(text: event.displayText)
 
-            // Kind indicator
-            Text(icon(for: event.kind))
-                .font(.system(size: 18))
-                .frame(width: 28, alignment: .center)
+            case .speech:
+                AgentBubbleRow(event: event, isRight: isRight, color: agentColor)
 
-            VStack(alignment: .leading, spacing: 4) {
+            case .observation:
+                ObservationRow(text: event.displayText, player: event.player)
 
-                // Header: player name + badge
-                HStack(spacing: 6) {
-                    if let player = event.player {
-                        Text(player)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(playerColor(for: event.player))
-                    }
+            case .system:
+                SystemRow(text: event.displayText, isProgress: false)
 
-                    BadgeView(
-                        label: badgeLabel(for: event.kind),
-                        color: badgeColor(for: event.kind)
-                    )
+            case .result:
+                ResultRow(text: event.displayText)
 
-                    Spacer()
+            default:
+                // decision, unknown, dll — tampilkan sebagai system
+                if !event.displayText.isEmpty {
+                    SystemRow(text: event.displayText, isProgress: false)
                 }
-
-                // Event text
-                Text(event.displayText)
-                    .font(font(for: event.kind))
-                    .foregroundStyle(textColor(for: event.kind))
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
-        .background(background(for: event.kind))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-
-    // MARK: - Helpers
-
-    private func icon(for kind: EventKind) -> String {
-        switch kind {
-        case .narration:   return "📖"
-        case .speech:      return "💬"
-        case .observation: return "👁️"
-        case .system:      return "⚙️"
-        case .decision:    return "🧠"
-        case .result:      return "🏁"
-        case .setup:       return "🎮"
-        default:           return "•"
-        }
-    }
-
-    private func badgeLabel(for kind: EventKind) -> String {
-        switch kind {
-        case .narration:   return "Story"
-        case .speech:      return "Agent"
-        case .observation: return "World"
-        case .system:      return "System"
-        case .decision:    return "Think"
-        case .result:      return "Result"
-        case .setup:       return "Setup"
-        default:           return "—"
-        }
-    }
-
-    private func badgeColor(for kind: EventKind) -> Color {
-        switch kind {
-        case .narration:   return .orange
-        case .speech:      return .blue
-        case .observation: return .green
-        case .system:      return .gray
-        case .decision:    return .purple
-        case .result:      return .red
-        default:           return .gray
-        }
-    }
-
-    private func font(for kind: EventKind) -> Font {
-        switch kind {
-        case .narration: return .body.italic()
-        case .decision:  return .caption
-        default:         return .body
-        }
-    }
-
-    private func textColor(for kind: EventKind) -> Color {
-        switch kind {
-        case .narration: return .primary
-        case .system:    return .secondary
-        case .decision:  return .secondary
-        default:         return .primary
-        }
-    }
-
-    private func background(for kind: EventKind) -> Color {
-        switch kind {
-        case .narration:   return .orange.opacity(0.06)
-        case .speech:      return .blue.opacity(0.06)
-        case .observation: return .green.opacity(0.06)
-        case .system:      return .clear
-        case .decision:    return .purple.opacity(0.04)
-        case .result:      return .red.opacity(0.08)
-        default:           return .clear
-        }
-    }
-
-    private func playerColor(for player: String?) -> Color {
-        guard let player else { return .secondary }
-        // Deterministik: hash nama player ke warna
-        let colors: [Color] = [.blue, .purple, .teal, .orange, .pink, .indigo]
-        let index = abs(player.hashValue) % colors.count
-        return colors[index]
     }
 }
 
-// MARK: - Badge View
+// MARK: - Narrator
 
-struct BadgeView: View {
-    let label: String
-    let color: Color
+struct NarratorRow: View {
+    let text: String
 
     var body: some View {
-        Text(label)
-            .font(.system(size: 10, weight: .semibold))
+        VStack(spacing: 5) {
+            Text("narrator")
+                .font(.system(size: 10, weight: .medium))
+                .tracking(1.2)
+                .foregroundStyle(.tertiary)
+
+            Text(text)
+                .font(.system(size: 13))
+                .italic()
+                .foregroundStyle(.secondary)
+                .lineSpacing(4)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(.secondary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Agent Bubble
+
+struct AgentBubbleRow: View {
+    let event: GameEvent
+    let isRight: Bool
+    let color: AgentColor
+
+    private var initials: String {
+        guard let name = event.player else { return "?" }
+        return name
+            .split(separator: "_")
+            .compactMap { $0.first.map { String($0).uppercased() } }
+            .joined()
+    }
+
+    var body: some View {
+        VStack(alignment: isRight ? .trailing : .leading, spacing: 3) {
+            // Header: avatar + name + turn
+            HStack(spacing: 5) {
+                if !isRight {
+                    avatarView
+                    nameView
+                    Spacer()
+                } else {
+                    Spacer()
+                    nameView
+                    avatarView
+                }
+            }
             .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
+
+            // Bubble
+            HStack {
+                if isRight { Spacer(minLength: 60) }
+                Text(event.displayText)
+                    .font(.system(size: 14))
+                    .foregroundStyle(color.text)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 9)
+                    .background(color.bubble)
+                    .clipShape(
+                        isRight
+                            ? RoundedCorners(tl: 16, tr: 4, bl: 16, br: 16)
+                            : RoundedCorners(tl: 4, tr: 16, bl: 16, br: 16)
+                    )
+                if !isRight { Spacer(minLength: 60) }
+            }
+        }
+    }
+
+    private var avatarView: some View {
+        ZStack {
+            Circle().fill(color.avatar).frame(width: 20, height: 20)
+            Text(initials)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(color.name)
+        }
+    }
+
+    private var nameView: some View {
+        HStack(spacing: 4) {
+            Text(event.player ?? "")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(color.name)
+            if let turn = event.turn {
+                Text("· turn \(turn)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.18))
+            }
+        }
+    }
+}
+
+// MARK: - Observation
+
+struct ObservationRow: View {
+    let text: String
+    let player: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: "eye")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
+            Group {
+                if let player {
+                    Text(player + " ")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AgentColor.from(player).name.opacity(0.6))
+                    + Text(text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                } else {
+                    Text(text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+            .lineSpacing(3)
+        }
+        .padding(.horizontal, 6)
+    }
+}
+
+// MARK: - System
+
+struct SystemRow: View {
+    let text: String
+    let isProgress: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Rectangle()
+                .fill(isProgress ? Color.green.opacity(0.6) : Color.secondary.opacity(0.2))
+                .frame(width: 1.5)
+                .padding(.vertical, 2)
+
+            Image(systemName: isProgress ? "checkmark" : "exclamationmark.triangle")
+                .font(.system(size: 11))
+                .foregroundStyle(isProgress ? Color.green : Color.secondary)
+                .padding(.top, 2)
+
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundStyle(isProgress ? Color.green : Color.secondary)
+                .lineSpacing(3)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Result
+
+struct ResultRow: View {
+    let text: String
+
+    private var isWon: Bool { text.contains("🎉") }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(isWon ? "🎉" : "💀")
+                .font(.system(size: 26))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(isWon ? "Escaped!" : "Game over")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isWon ? Color.green.opacity(0.9) : Color(red: 0.97, green: 0.45, blue: 0.45))
+                Text(text.replacingOccurrences(of: "🎉 Game Over — ", with: "")
+                        .replacingOccurrences(of: "💀 Game Over — ", with: ""))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.white.opacity(0.25))
+                    .lineSpacing(2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            isWon
+                ? Color.green.opacity(0.07)
+                : Color(red: 0.37, green: 0.06, blue: 0.06)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(
+                    isWon ? Color.green.opacity(0.15) : Color.red.opacity(0.2),
+                    lineWidth: 0.5
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Custom Corner Radius Shape
+
+struct RoundedCorners: Shape {
+    var tl: CGFloat = 0
+    var tr: CGFloat = 0
+    var bl: CGFloat = 0
+    var br: CGFloat = 0
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.size.width
+        let h = rect.size.height
+        path.move(to: CGPoint(x: w / 2.0, y: 0))
+        path.addLine(to: CGPoint(x: w - tr, y: 0))
+        path.addArc(center: CGPoint(x: w - tr, y: tr), radius: tr, startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
+        path.addLine(to: CGPoint(x: w, y: h - br))
+        path.addArc(center: CGPoint(x: w - br, y: h - br), radius: br, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: CGPoint(x: bl, y: h))
+        path.addArc(center: CGPoint(x: bl, y: h - bl), radius: bl, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: 0, y: tl))
+        path.addArc(center: CGPoint(x: tl, y: tl), radius: tl, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
     }
 }

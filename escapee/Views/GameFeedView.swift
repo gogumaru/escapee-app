@@ -9,48 +9,30 @@
 import SwiftUI
 
 struct GameFeedView: View {
-
     @ObservedObject var vm: GameViewModel
     @State private var showStatePanel = false
-    @State private var autoScroll = true
 
     var body: some View {
         VStack(spacing: 0) {
-
-            // Filter bar
-            FilterBar(active: vm.activeFilter) { filter in
-                vm.setFilter(filter)
-                // Reset auto-scroll saat ganti filter
-                autoScroll = true
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(.bar)
+            GameNavBar(vm: vm, onShowState: { showStatePanel.toggle() })
 
             Divider()
 
-            // Feed
             if vm.filteredEvents.isEmpty {
                 WaitingView()
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 8) {
+                        LazyVStack(alignment: .leading, spacing: 10) {
                             ForEach(vm.filteredEvents) { event in
-                                EventRowView(event: event)
-                                    .id(event.id)
+                                EventRowView(event: event).id(event.id)
                             }
-                            // Anchor invisible di bawah untuk scroll target
                             Color.clear.frame(height: 1).id("bottom")
                         }
-                        .padding()
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
                     }
                     .onChange(of: vm.filteredEvents.count) {
-                        guard autoScroll else { return }
-                        // Tanpa animasi supaya tidak naik-turun
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                    .onChange(of: vm.activeFilter) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
                 }
@@ -58,10 +40,33 @@ struct GameFeedView: View {
 
             Divider()
 
-            // Bottom status bar
-            StatusBar(vm: vm, onToggleState: {
-                showStatePanel.toggle()
-            })
+            // Bottom bar — turn count + play again
+            HStack {
+                Spacer()
+
+                if !vm.isConnected && vm.hasEvents {
+                    Button(action: { vm.replayGame() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 12))
+                            Text("Play again")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(.red.opacity(0.8))
+                    }
+                    Spacer()
+                }
+
+                Text("\(vm.turnCount) turns")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
+            .background(.bar)
         }
         .sheet(isPresented: $showStatePanel) {
             StatePanelView(state: vm.currentState)
@@ -70,85 +75,51 @@ struct GameFeedView: View {
     }
 }
 
-// MARK: - Filter Bar
+// MARK: - Navbar
 
-struct FilterBar: View {
-    let active: FeedFilter
-    let onSelect: (FeedFilter) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FeedFilter.allCases, id: \.self) { filter in
-                    Button(filter.rawValue) {
-                        onSelect(filter)
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        active == filter
-                            ? Color.blue
-                            : Color.secondary.opacity(0.12)
-                    )
-                    .foregroundStyle(active == filter ? .white : .primary)
-                    .clipShape(Capsule())
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Status Bar
-
-struct StatusBar: View {
+struct GameNavBar: View {
     @ObservedObject var vm: GameViewModel
-    let onToggleState: () -> Void
+    let onShowState: () -> Void
 
     var body: some View {
         HStack {
-            // Connection dot + status
-            Circle()
-                .fill(vm.isConnected ? .green : .red)
-                .frame(width: 8, height: 8)
-            Text(vm.connectionLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(vm.navigationTitle)
+                    .font(.system(size: 16, weight: .medium))
 
-            Spacer()
-
-            Text("\(vm.turnCount) turns")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            // Tombol Play Again muncul saat game selesai
-            if !vm.isConnected && vm.hasEvents {
-                Button {
-                    vm.stopGame()
-                } label: {
-                    Label("Play Again", systemImage: "arrow.counterclockwise")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.blue)
-                        .foregroundStyle(.white)
-                        .clipShape(Capsule())
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(vm.isConnected ? Color.green : Color.red)
+                        .frame(width: 6, height: 6)
+                    Text(vm.isConnected
+                         ? "\(agentCount) agents · live"
+                         : "disconnected")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            Button {
-                onToggleState()
-            } label: {
-                Label("State", systemImage: "map")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(.secondary.opacity(0.12))
-                    .clipShape(Capsule())
+            Spacer()
+
+            HStack(spacing: 16) {
+                Button(action: onShowState) {
+                    Image(systemName: "map")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.secondary)
+                }
+                Button(action: { vm.stopGame() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var agentCount: Int {
+        vm.currentState?.players.count ?? 2
     }
 }
 
@@ -156,11 +127,11 @@ struct StatusBar: View {
 
 struct WaitingView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             Spacer()
             ProgressView()
             Text("Waiting for agents...")
-                .font(.subheadline)
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
             Spacer()
         }

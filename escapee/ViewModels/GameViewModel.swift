@@ -86,7 +86,7 @@ class GameViewModel: ObservableObject {
         service.connect(host: host, port: port, narrate: narrate)
     }
 
-    /// Stop game dan disconnect
+    /// Stop game dan disconnect — balik ke setup screen
     func stopGame() {
         service.disconnect()
         phase = .idle
@@ -95,6 +95,17 @@ class GameViewModel: ObservableObject {
         currentState = nil
         gameResult = nil
         setup = nil
+    }
+
+    /// Langsung reconnect dengan settings yang sama
+    func replayGame() {
+        let lastHost = service.lastHost
+        let lastPort = service.lastPort
+        let lastNarrate = service.lastNarrate
+        stopGame()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.startGame(host: lastHost, port: lastPort, narrate: lastNarrate)
+        }
     }
 
     /// Ganti filter feed
@@ -226,8 +237,8 @@ extension GameViewModel {
     /// Apakah ada event yang masuk (game aktif)
     var hasEvents: Bool { !allEvents.isEmpty }
 
-    /// Total turns dari result, atau jumlah events sebagai proxy
+    /// Turn count — dari state snapshot (paling akurat) atau result
     var turnCount: Int {
-        gameResult?.turns ?? allEvents.filter { $0.kind == .observation }.count
+        gameResult?.turns ?? currentState?.turn ?? allEvents.filter { $0.kind == .observation }.count
     }
 }

@@ -190,6 +190,11 @@ class GameSocketService: NSObject, ObservableObject {
     private let decoder = JSONDecoder()
     private var messageCount = 0
 
+    // Simpan settings terakhir untuk replay
+    private(set) var lastHost: String = "localhost"
+    private(set) var lastPort: Int = 8000
+    private(set) var lastNarrate: Bool = true
+
     override init() {
         super.init()
         urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
@@ -202,6 +207,9 @@ class GameSocketService: NSObject, ObservableObject {
 
         let urlString = "ws://\(host):\(port)/ws/game?narrate=\(narrate)"
         Log.ws("Connecting to: \(urlString)")
+        lastHost = host
+        lastPort = port
+        lastNarrate = narrate
 
         guard let url = URL(string: urlString) else {
             connectionState = .error("Invalid URL: \(urlString)")
