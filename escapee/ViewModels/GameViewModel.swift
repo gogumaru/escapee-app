@@ -237,6 +237,12 @@ extension GameViewModel {
     /// Apakah ada event yang masuk (game aktif)
     var hasEvents: Bool { !allEvents.isEmpty }
 
+    /// Resolve player_1/player_2 ke nama asli dari state snapshot
+    func playerName(for actorId: String?) -> String? {
+        guard let id = actorId else { return nil }
+        return currentState?.players.first(where: { $0.id == id })?.name ?? id
+    }
+
     /// Turn count — dari state snapshot (paling akurat) atau result
     var turnCount: Int {
         gameResult?.turns ?? currentState?.turn ?? allEvents.filter { $0.kind == .observation }.count

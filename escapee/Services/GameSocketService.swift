@@ -84,10 +84,10 @@ struct GameEvent: Identifiable {
 
     var displayText: String { text }
 
-    static func from(_ event: BackendEvent) -> GameEvent {
+    static func from(_ event: BackendEvent, resolvedName: String? = nil) -> GameEvent {
         GameEvent(
             kind: event.kind,
-            player: event.actorId,
+            player: resolvedName ?? event.actorId,
             text: event.text ?? "",
             turn: event.turn
         )
@@ -189,6 +189,7 @@ class GameSocketService: NSObject, ObservableObject {
     private var urlSession: URLSession!
     private let decoder = JSONDecoder()
     private var messageCount = 0
+    private var playerNames: [String: String] = [:]  // player_1 → "Alex Quinn"
 
     // Simpan settings terakhir untuk replay
     private(set) var lastHost: String = "localhost"
@@ -301,7 +302,8 @@ class GameSocketService: NSObject, ObservableObject {
     private func handleEventMessage(_ data: Data, raw: String) {
         do {
             let backendEvent = try decoder.decode(BackendEvent.self, from: data)
-            let event = GameEvent.from(backendEvent)
+            let resolvedName = playerNames[backendEvent.actorId ?? ""] ?? backendEvent.actorId
+        let event = GameEvent.from(backendEvent, resolvedName: resolvedName)
             Log.event("kind=\(event.kind.rawValue) player=\(event.player ?? "nil") text=\(event.text.prefix(60))")
 
             DispatchQueue.main.async {
@@ -323,6 +325,10 @@ class GameSocketService: NSObject, ObservableObject {
             let snapshot = try decoder.decode(GameStateSnapshot.self, from: data)
             let playerInfo = snapshot.players.map { "\($0.name)@\($0.room)" }.joined(separator: ", ")
             Log.state("Turn \(snapshot.turn) | \(playerInfo) | Objects: \(snapshot.objects.count)")
+            // Simpan mapping id → nama untuk resolve di event
+            for player in snapshot.players {
+                playerNames[player.id] = player.name
+            }
             DispatchQueue.main.async {
                 self.currentState = snapshot
             }

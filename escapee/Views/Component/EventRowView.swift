@@ -19,9 +19,10 @@ struct AgentColor {
 
     static func from(_ playerId: String?) -> AgentColor {
         guard let id = playerId else { return .system }
-
+        // Pakai first char + length supaya player_1 vs player_2 selalu beda warna
+        let seed = (id.unicodeScalars.first?.value ?? 0) + UInt32(id.count)
         let palette: [AgentColor] = [.alex, .riley, .charlie, .dana]
-        let index = abs(id.hashValue) % palette.count
+        let index = Int(seed) % palette.count
         return palette[index]
     }
 
@@ -67,12 +68,8 @@ struct AgentColor {
 struct EventRowView: View {
     let event: GameEvent
 
-    // Tentukan apakah bubble ini dari "kanan" (player genap)
-    private var isRight: Bool {
-        guard let id = event.player else { return false }
-        let index = abs(id.hashValue) % 2
-        return index == 1
-    }
+    // Semua bubble di kiri
+    private var isRight: Bool { false }
 
     private var agentColor: AgentColor {
         .from(event.player)
@@ -91,7 +88,10 @@ struct EventRowView: View {
                 ObservationRow(text: event.displayText, player: event.player)
 
             case .system:
-                SystemRow(text: event.displayText, isProgress: false)
+                SystemRow(
+                    text: event.displayText,
+                    isProgress: event.displayText.contains("Progress") || event.displayText.contains("✓")
+                )
 
             case .result:
                 ResultRow(text: event.displayText)
@@ -151,23 +151,16 @@ struct AgentBubbleRow: View {
 
     var body: some View {
         VStack(alignment: isRight ? .trailing : .leading, spacing: 3) {
-            // Header: avatar + name + turn
+            // Header: avatar + name + turn — selalu kiri
             HStack(spacing: 5) {
-                if !isRight {
-                    avatarView
-                    nameView
-                    Spacer()
-                } else {
-                    Spacer()
-                    nameView
-                    avatarView
-                }
+                avatarView
+                nameView
+                Spacer()
             }
             .padding(.horizontal, 6)
 
-            // Bubble
+            // Bubble — selalu kiri, pojok kiri atas tajam
             HStack {
-                if isRight { Spacer(minLength: 60) }
                 Text(event.displayText)
                     .font(.system(size: 14))
                     .foregroundStyle(color.text)
@@ -175,12 +168,8 @@ struct AgentBubbleRow: View {
                     .padding(.horizontal, 13)
                     .padding(.vertical, 9)
                     .background(color.bubble)
-                    .clipShape(
-                        isRight
-                            ? RoundedCorners(tl: 16, tr: 4, bl: 16, br: 16)
-                            : RoundedCorners(tl: 4, tr: 16, bl: 16, br: 16)
-                    )
-                if !isRight { Spacer(minLength: 60) }
+                    .clipShape(RoundedCorners(tl: 4, tr: 16, bl: 16, br: 16))
+                Spacer(minLength: 60)
             }
         }
     }
@@ -216,15 +205,14 @@ struct ObservationRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
-            Image(systemName: "eye")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 2)
+            Text("👁️")
+                .font(.system(size: 12))
+                .padding(.top, 1)
             Group {
                 if let player {
                     Text(player + " ")
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AgentColor.from(player).name.opacity(0.6))
+                        .foregroundStyle(AgentColor.from(player).name)
                     + Text(text)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.secondary)
@@ -248,20 +236,34 @@ struct SystemRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
-            Rectangle()
-                .fill(isProgress ? Color.green.opacity(0.6) : Color.secondary.opacity(0.2))
-                .frame(width: 1.5)
-                .padding(.vertical, 2)
+            Group {
+                if isProgress {
+                    Text("🔔").font(.system(size: 12))
+                } else {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+            .padding(.top, 1)
 
-            Image(systemName: isProgress ? "checkmark" : "exclamationmark.triangle")
-                .font(.system(size: 11))
-                .foregroundStyle(isProgress ? Color.green : Color.secondary)
-                .padding(.top, 2)
-
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(isProgress ? Color.green : Color.secondary)
-                .lineSpacing(3)
+            Group {
+                if isProgress {
+                    Text("progress  ")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.green)
+                    + Text(text
+                        .replacingOccurrences(of: "✓ Progress! The team just achieved: ", with: "")
+                        .replacingOccurrences(of: "✓ ", with: ""))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                } else {
+                    Text(text)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondary)
+                }
+            }
+            .lineSpacing(3)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
