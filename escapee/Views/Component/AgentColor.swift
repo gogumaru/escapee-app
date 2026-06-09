@@ -14,12 +14,16 @@ struct AgentColor {
     let name: Color
     let avatar: Color
 
-    static func from(_ playerId: String?) -> AgentColor {
+    static func from(_ playerId: String?, order: [String] = []) -> AgentColor {
         guard let id = playerId else { return .system }
-        let seed = (id.unicodeScalars.first?.value ?? 0) + UInt32(id.count)
         let palette: [AgentColor] = [.blue, .purple, .teal, .amber]
-        let index = Int(seed) % palette.count
-        return palette[index]
+        // Pakai urutan kemunculan kalau tersedia — dijamin tidak collision
+        if let index = order.firstIndex(of: id) {
+            return palette[index % palette.count]
+        }
+        // Fallback ke hash kalau order belum ada
+        let seed = (id.unicodeScalars.first?.value ?? 0) + UInt32(id.count)
+        return palette[Int(seed) % palette.count]
     }
 
     // Biru

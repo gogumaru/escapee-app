@@ -79,22 +79,30 @@ struct GameEvent: Identifiable {
     let id: UUID = UUID()
     let kind: EventKind
     let player: String?
+    let playerId: String?       // raw actor_id untuk color lookup
     let text: String
     let turn: Int?
+    let playerOrder: [String]   // urutan player untuk warna
 
     var displayText: String { text }
 
-    static func from(_ event: BackendEvent, resolvedName: String? = nil) -> GameEvent {
+    var agentColor: AgentColor {
+        AgentColor.from(playerId, order: playerOrder)
+    }
+
+    static func from(_ event: BackendEvent, resolvedName: String? = nil, playerOrder: [String] = []) -> GameEvent {
         GameEvent(
             kind: event.kind,
             player: resolvedName ?? event.actorId,
+            playerId: event.actorId,
             text: event.text ?? "",
-            turn: event.turn
+            turn: event.turn,
+            playerOrder: playerOrder
         )
     }
 
     static func synthetic(kind: EventKind, text: String) -> GameEvent {
-        GameEvent(kind: kind, player: nil, text: text, turn: nil)
+        GameEvent(kind: kind, player: nil, playerId: nil, text: text, turn: nil, playerOrder: [])
     }
 }
 
@@ -189,7 +197,8 @@ class GameSocketService: NSObject, ObservableObject {
     private var urlSession: URLSession!
     private let decoder = JSONDecoder()
     private var messageCount = 0
-    private var playerNames: [String: String] = [:]  // player_1 → "Alex Quinn"
+    private var playerNames: [String: String] = [:]      // player_1 → "Alex Quinn"
+    private(set) var playerOrder: [String] = []           // urutan kemunculan player_id
 
     // Simpan settings terakhir untuk replay
     private(set) var lastURL: URL?
@@ -223,6 +232,8 @@ class GameSocketService: NSObject, ObservableObject {
 
     private func reset() {
         messageCount = 0
+        playerNames = [:]
+        playerOrder = []
         DispatchQueue.main.async {
             self.events = []
             self.currentState = nil
@@ -291,7 +302,7 @@ class GameSocketService: NSObject, ObservableObject {
         do {
             let backendEvent = try decoder.decode(BackendEvent.self, from: data)
             let resolvedName = playerNames[backendEvent.actorId ?? ""] ?? backendEvent.actorId
-        let event = GameEvent.from(backendEvent, resolvedName: resolvedName)
+        let event = GameEvent.from(backendEvent, resolvedName: resolvedName, playerOrder: playerOrder)
             Log.event("kind=\(event.kind.rawValue) player=\(event.player ?? "nil") text=\(event.text.prefix(60))")
 
             DispatchQueue.main.async {
@@ -332,9 +343,12 @@ class GameSocketService: NSObject, ObservableObject {
             let snapshot = try decoder.decode(GameStateSnapshot.self, from: data)
             let playerInfo = snapshot.players.map { "\($0.name)@\($0.room)" }.joined(separator: ", ")
             Log.state("Turn \(snapshot.turn) | \(playerInfo) | Objects: \(snapshot.objects.count)")
-            // Simpan mapping id → nama untuk resolve di event
+            // Simpan mapping id → nama, dan urutan kemunculan
             for player in snapshot.players {
                 playerNames[player.id] = player.name
+                if !playerOrder.contains(player.id) {
+                    playerOrder.append(player.id)
+                }
             }
             DispatchQueue.main.async {
                 self.currentState = snapshot

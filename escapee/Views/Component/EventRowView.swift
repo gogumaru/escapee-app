@@ -5,7 +5,6 @@
 //  Created by Benedikta Anin on 04/06/26.
 //
 
-
 import SwiftUI
 
 // MARK: - EventRowView
@@ -17,7 +16,7 @@ struct EventRowView: View {
     private var isRight: Bool { false }
 
     private var agentColor: AgentColor {
-        .from(event.player)
+        event.agentColor
     }
 
     var body: some View {
@@ -30,7 +29,7 @@ struct EventRowView: View {
                 AgentBubbleRow(event: event, isRight: isRight, color: agentColor)
 
             case .observation:
-                ObservationRow(text: event.displayText, player: event.player)
+                ObservationRow(text: event.displayText, player: event.player, event: event)
 
             case .system:
                 SystemRow(
@@ -147,30 +146,55 @@ struct AgentBubbleRow: View {
 struct ObservationRow: View {
     let text: String
     let player: String?
+    let event: GameEvent
+
+    private var cleanText: String {
+        guard text.hasPrefix("You ") else { return text }
+        return String(text.dropFirst(4))
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Text("👁️")
                 .font(.system(size: 12))
                 .padding(.top, 1)
-            Group {
-                if let player {
-                    Text(player + " ")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(AgentColor.from(player).name)
-                    + Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondary)
-                } else {
-                    Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondary)
-                }
+            if let player {
+                Text(attributedObservation(player: player, text: cleanText, nameColor: event.agentColor.name))
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+            } else {
+                Text(cleanText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.secondary)
+                    .lineSpacing(3)
             }
-            .lineSpacing(3)
         }
         .padding(.horizontal, 6)
     }
+}
+
+private func attributedProgress(text: String) -> AttributedString {
+    var result = AttributedString("progress  \(text)")
+    if let range = result.range(of: "progress") {
+        result[range].foregroundColor = UIColor.systemGreen
+        result[range].font = .systemFont(ofSize: 12, weight: .medium)
+    }
+    if let range = result.range(of: "  \(text)") {
+        result[range].foregroundColor = UIColor.secondaryLabel
+    }
+    return result
+}
+
+private func attributedObservation(player: String, text: String, nameColor: Color) -> AttributedString {
+    var result = AttributedString("\(player) \(text)")
+    // Default semua ke secondary
+    result.foregroundColor = UIColor.secondaryLabel
+    // Override nama agent dengan warna accent
+    if let range = result.range(of: player) {
+        result[range].foregroundColor = UIColor(nameColor)
+        result[range].font = .systemFont(ofSize: 12, weight: .medium)
+    }
+    return result
 }
 
 // MARK: - System
@@ -192,23 +216,19 @@ struct SystemRow: View {
             }
             .padding(.top, 1)
 
-            Group {
-                if isProgress {
-                    Text("progress  ")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.green)
-                    + Text(text
-                        .replacingOccurrences(of: "✓ Progress! The team just achieved: ", with: "")
-                        .replacingOccurrences(of: "✓ ", with: ""))
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondary)
-                } else {
-                    Text(text)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondary)
-                }
+            if isProgress {
+                let clean = text
+                    .replacingOccurrences(of: "✓ Progress! The team just achieved: ", with: "")
+                    .replacingOccurrences(of: "✓ ", with: "")
+                Text(attributedProgress(text: clean))
+                    .font(.system(size: 12))
+                    .lineSpacing(3)
+            } else {
+                Text(text)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.secondary)
+                    .lineSpacing(3)
             }
-            .lineSpacing(3)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)

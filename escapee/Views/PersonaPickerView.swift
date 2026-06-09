@@ -174,7 +174,7 @@ struct PersonaCardView: View {
 
                     // Skills
                     FlowTagLayout(items: persona.skillList) { skill in
-                        Text(skill)
+                        Text(skill.replacingOccurrences(of: "_", with: " "))
                             .font(.system(size: 11))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
@@ -259,10 +259,11 @@ struct FlowTagLayout<Item: Hashable, Content: View>: View {
     let content: (Item) -> Content
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 4)], spacing: 4) {
+        HStack(spacing: 4) {
             ForEach(items, id: \.self) { item in
                 content(item)
             }
+            Spacer()
         }
     }
 }
