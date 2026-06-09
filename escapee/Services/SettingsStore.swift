@@ -23,10 +23,15 @@ class SettingsStore: ObservableObject {
         didSet { UserDefaults.standard.set(narrate, forKey: "escapee_narrate") }
     }
 
+    @Published var rounds: Int {
+        didSet { UserDefaults.standard.set(rounds, forKey: "escapee_rounds") }
+    }
+
     init() {
         self.host    = UserDefaults.standard.string(forKey: "escapee_host") ?? "localhost"
         self.port    = UserDefaults.standard.integer(forKey: "escapee_port").nonZero ?? 8000
         self.narrate = UserDefaults.standard.object(forKey: "escapee_narrate") as? Bool ?? true
+        self.rounds  = UserDefaults.standard.integer(forKey: "escapee_rounds").nonZero ?? 75
     }
 }
 

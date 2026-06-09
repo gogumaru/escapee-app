@@ -192,9 +192,7 @@ class GameSocketService: NSObject, ObservableObject {
     private var playerNames: [String: String] = [:]  // player_1 → "Alex Quinn"
 
     // Simpan settings terakhir untuk replay
-    private(set) var lastHost: String = "localhost"
-    private(set) var lastPort: Int = 8000
-    private(set) var lastNarrate: Bool = true
+    private(set) var lastURL: URL?
 
     override init() {
         super.init()
@@ -203,20 +201,10 @@ class GameSocketService: NSObject, ObservableObject {
 
     // MARK: - Public API
 
-    func connect(host: String = "localhost", port: Int = 8000, narrate: Bool = true) {
+    func connect(url: URL) {
         guard connectionState != .connected, connectionState != .connecting else { return }
-
-        let urlString = "ws://\(host):\(port)/ws/game?narrate=\(narrate)"
-        Log.ws("Connecting to: \(urlString)")
-        lastHost = host
-        lastPort = port
-        lastNarrate = narrate
-
-        guard let url = URL(string: urlString) else {
-            connectionState = .error("Invalid URL: \(urlString)")
-            return
-        }
-
+        Log.ws("Connecting to: \(url)")
+        lastURL = url
         reset()
         connectionState = .connecting
         webSocketTask = urlSession.webSocketTask(with: url)
@@ -309,8 +297,27 @@ class GameSocketService: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 switch event.kind {
                 case .prompt, .planner, .decision:
-                    // Skip dari feed — debug only
                     break
+
+                case .system:
+                    // Skip internal orchestrator messages
+                    let text = event.text
+                    let skipPrefixes = [
+                        "(progress gate)",
+                        "(planner override)",
+                        "(loop avoided)",
+                        "(policy gate)",
+                        "(stall gate)",
+                        "CRITICAL:",
+                        "OUT-OF-POLICY",
+                        "STALL MODE",
+                        "📋 Shared plan"
+                    ]
+                    let shouldSkip = skipPrefixes.contains { text.hasPrefix($0) }
+                    if !shouldSkip {
+                        self.events.append(event)
+                    }
+
                 default:
                     self.events.append(event)
                 }

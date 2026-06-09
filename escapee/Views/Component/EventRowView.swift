@@ -8,61 +8,6 @@
 
 import SwiftUI
 
-// MARK: - Agent Colors
-// Deterministik per player ID — konsisten sepanjang game
-
-struct AgentColor {
-    let bubble: Color
-    let text: Color
-    let name: Color
-    let avatar: Color
-
-    static func from(_ playerId: String?) -> AgentColor {
-        guard let id = playerId else { return .system }
-        // Pakai first char + length supaya player_1 vs player_2 selalu beda warna
-        let seed = (id.unicodeScalars.first?.value ?? 0) + UInt32(id.count)
-        let palette: [AgentColor] = [.alex, .riley, .charlie, .dana]
-        let index = Int(seed) % palette.count
-        return palette[index]
-    }
-
-    // Biru — player pertama
-    static let alex = AgentColor(
-        bubble: Color(red: 0.05, green: 0.13, blue: 0.25),
-        text:   Color(red: 0.86, green: 0.93, blue: 1.0),
-        name:   Color(red: 0.37, green: 0.51, blue: 0.98),
-        avatar: Color(red: 0.23, green: 0.38, blue: 0.62)
-    )
-    // Ungu — player kedua
-    static let riley = AgentColor(
-        bubble: Color(red: 0.10, green: 0.05, blue: 0.21),
-        text:   Color(red: 0.93, green: 0.91, blue: 1.0),
-        name:   Color(red: 0.66, green: 0.33, blue: 0.97),
-        avatar: Color(red: 0.37, green: 0.20, blue: 0.55)
-    )
-    // Teal — player ketiga
-    static let charlie = AgentColor(
-        bubble: Color(red: 0.04, green: 0.18, blue: 0.18),
-        text:   Color(red: 0.86, green: 0.97, blue: 0.97),
-        name:   Color(red: 0.20, green: 0.75, blue: 0.70),
-        avatar: Color(red: 0.10, green: 0.40, blue: 0.38)
-    )
-    // Amber — player keempat
-    static let dana = AgentColor(
-        bubble: Color(red: 0.20, green: 0.14, blue: 0.03),
-        text:   Color(red: 1.0, green: 0.95, blue: 0.86),
-        name:   Color(red: 0.90, green: 0.65, blue: 0.20),
-        avatar: Color(red: 0.50, green: 0.35, blue: 0.05)
-    )
-    // System — abu
-    static let system = AgentColor(
-        bubble: Color.white.opacity(0.05),
-        text:   Color.white.opacity(0.5),
-        name:   Color.white.opacity(0.3),
-        avatar: Color.white.opacity(0.1)
-    )
-}
-
 // MARK: - EventRowView
 
 struct EventRowView: View {

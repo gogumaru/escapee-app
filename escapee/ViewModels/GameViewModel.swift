@@ -80,10 +80,26 @@ class GameViewModel: ObservableObject {
 
     // MARK: - Public Actions
 
-    /// Konek ke backend dan mulai game
-    func startGame(host: String, port: Int, narrate: Bool = true) {
+    /// Konek ke backend dengan URL custom (dari PersonaService)
+    func startGame(url: URL) {
         phase = .connecting
-        service.connect(host: host, port: port, narrate: narrate)
+        service.connect(url: url)
+    }
+
+    /// Konek ke backend dengan settings sederhana (fallback)
+    func startGame(host: String, port: Int, narrate: Bool = true) {
+        let url = PersonaService.shared.buildWebSocketURL(
+            host: host,
+            port: port,
+            narrate: narrate,
+            rounds: 75,
+            model: "qwen2.5:7b",
+            selectedPersonas: []
+        )
+        if let url {
+            phase = .connecting
+            service.connect(url: url)
+        }
     }
 
     /// Stop game dan disconnect — balik ke setup screen
@@ -97,14 +113,12 @@ class GameViewModel: ObservableObject {
         setup = nil
     }
 
-    /// Langsung reconnect dengan settings yang sama
+    /// Langsung reconnect dengan URL yang sama
     func replayGame() {
-        let lastHost = service.lastHost
-        let lastPort = service.lastPort
-        let lastNarrate = service.lastNarrate
+        guard let lastURL = service.lastURL else { return }
         stopGame()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.startGame(host: lastHost, port: lastPort, narrate: lastNarrate)
+            self.startGame(url: lastURL)
         }
     }
 
@@ -143,18 +157,7 @@ class GameViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Pantau setup info
-        service.$setup
-            .receive(on: RunLoop.main)
-            .sink { [weak self] setup in
-                guard let self else { return }
-                self.setup = setup
-                if setup != nil, case .connecting = self.phase {
-                    self.phase = .setup
-                }
-            }
-            .store(in: &cancellables)
-
+        
         // Pantau connection state
         service.$connectionState
             .receive(on: RunLoop.main)
