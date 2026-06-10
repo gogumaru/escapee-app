@@ -87,7 +87,7 @@ struct VNGameView: View {
                     Spacer()
                     VNDialogView(vnVM: vnVM, gameVM: gameVM)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 84)
                     VNControlsView(vnVM: vnVM)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 28)

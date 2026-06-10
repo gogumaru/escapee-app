@@ -9,7 +9,7 @@
 import SwiftUI
 
 struct VNDialogView: View {
-    let vnVM: VNGameViewModel
+    @ObservedObject var vnVM: VNGameViewModel
     @ObservedObject var gameVM: GameViewModel
 
     var body: some View {
