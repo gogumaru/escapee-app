@@ -43,7 +43,7 @@ struct SetupView: View {
                         .font(.system(size: 38, weight: .medium))
                         .foregroundStyle(.primary)
 
-                    Text("Two AI agents. One locked room.\nWill they make it out?")
+                    Text("The agents need you.\nWill you make it out?")
                         .font(.system(size: 14))
                         .foregroundStyle(Color.secondary)
                         .multilineTextAlignment(.center)

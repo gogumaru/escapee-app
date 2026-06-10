@@ -117,7 +117,7 @@ class GameViewModel: ObservableObject {
     func replayGame() {
         guard let lastURL = service.lastURL else { return }
         stopGame()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.startGame(url: lastURL)
         }
     }
@@ -157,7 +157,18 @@ class GameViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        
+        // Pantau setup info
+        service.$setup
+            .receive(on: RunLoop.main)
+            .sink { [weak self] setup in
+                guard let self else { return }
+                self.setup = setup
+                if setup != nil, case .connecting = self.phase {
+                    self.phase = .setup
+                }
+            }
+            .store(in: &cancellables)
+
         // Pantau connection state
         service.$connectionState
             .receive(on: RunLoop.main)
@@ -239,6 +250,9 @@ extension GameViewModel {
 
     /// Apakah ada event yang masuk (game aktif)
     var hasEvents: Bool { !allEvents.isEmpty }
+
+    /// Urutan player untuk warna — expose dari service
+    var playerOrder: [String] { service.playerOrder }
 
     /// Resolve player_1/player_2 ke nama asli dari state snapshot
     func playerName(for actorId: String?) -> String? {
