@@ -21,16 +21,18 @@ struct Log {
 // MARK: - Event Kind
 
 enum EventKind: String, Codable {
-    case setup       = "setup"
-    case speech      = "speech"
-    case observation = "observation"
-    case system      = "system"
-    case narration   = "narration"
-    case decision    = "decision"
-    case prompt      = "prompt"
-    case planner     = "planner"
-    case state       = "state"
-    case result      = "result"
+    case setup          = "setup"
+    case speech         = "speech"
+    case observation    = "observation"
+    case discovery      = "discovery"
+    case system         = "system"
+    case narration      = "narration"
+    case decision       = "decision"
+    case prompt         = "prompt"
+    case planner        = "planner"
+    case state          = "state"
+    case result         = "result"
+    case humanDeduction = "human_deduction"
     case unknown
 
     init(from decoder: Decoder) throws {
@@ -41,23 +43,18 @@ enum EventKind: String, Codable {
 }
 
 // MARK: - Backend Message Types
-// Backend kirim 3 jenis pesan berbeda:
-// 1. {"type": "event", "kind": "speech/observation/...", "actor_id": ..., "text": ...}
-// 2. {"type": "state", "turn": ..., "players": [...], "objects": [...]}
-// 3. {"type": "result", "won": ..., "turns": ..., "reason": ...}
 
 struct BackendMessage: Decodable {
-    let type: String   // "event" | "state" | "result" | "setup"
-    let kind: String?  // hanya ada kalau type == "event"
+    let type: String
+    let kind: String?
 }
 
-// Event dari backend (type = "event")
 struct BackendEvent: Decodable {
     let kind: EventKind
     let actorId: String?
     let text: String?
     let turn: Int?
-    let data: AnyCodable?
+    let data: BackendEventData?
 
     enum CodingKeys: String, CodingKey {
         case kind
@@ -66,11 +63,44 @@ struct BackendEvent: Decodable {
     }
 }
 
-// Result dari backend (type = "result")
+struct BackendEventData: Decodable {
+    let question: String?
+    let attempt: Int?
+    let maxAttempts: Int?
+    let hint: String?
+
+    enum CodingKeys: String, CodingKey {
+        case question, attempt, hint
+        case maxAttempts = "max_attempts"
+    }
+}
+
 struct BackendResult: Decodable {
     let won: Bool
     let turns: Int
     let reason: String
+}
+
+// MARK: - Suspect & Deduction models
+
+struct SuspectInfo: Decodable, Identifiable {
+    var id: String { name }
+    let name: String
+    let connectionToVictim: String?
+    let apparentMotive: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case connectionToVictim = "connection_to_victim"
+        case apparentMotive     = "apparent_motive"
+    }
+}
+
+struct DeductionPrompt {
+    let question: String
+    let attempt: Int
+    let maxAttempts: Int
+    let hint: String
 }
 
 // MARK: - GameEvent (untuk UI)
@@ -79,10 +109,10 @@ struct GameEvent: Identifiable {
     let id: UUID = UUID()
     let kind: EventKind
     let player: String?
-    let playerId: String?       // raw actor_id untuk color lookup
+    let playerId: String?
     let text: String
     let turn: Int?
-    let playerOrder: [String]   // urutan player untuk warna
+    let playerOrder: [String]
 
     var displayText: String { text }
 
@@ -147,17 +177,15 @@ struct GameResult {
 
 struct GameSetup {
     let scenario: String?
+    let suspects: [SuspectInfo]
+    let deductionQuestion: String?
 }
-
-// MARK: - AnyCodable (untuk field data yang bisa null)
 
 struct AnyCodable: Decodable {
     init(from decoder: Decoder) throws {
-        // Terima apapun tanpa error
         _ = try? decoder.singleValueContainer()
     }
 }
-
 
 // MARK: - GameSocketService
 
@@ -165,9 +193,11 @@ class GameSocketService: NSObject, ObservableObject {
 
     // MARK: Published
     @Published var events: [GameEvent] = []
+    @Published var discoveries: [GameEvent] = []
     @Published var currentState: GameStateSnapshot?
     @Published var gameResult: GameResult?
     @Published var setup: GameSetup?
+    @Published var deductionPrompt: DeductionPrompt?
     @Published var connectionState: ConnectionState = .disconnected
 
     enum ConnectionState: Equatable {
@@ -197,10 +227,8 @@ class GameSocketService: NSObject, ObservableObject {
     private var urlSession: URLSession!
     private let decoder = JSONDecoder()
     private var messageCount = 0
-    private var playerNames: [String: String] = [:]      // player_1 → "Alex Quinn"
-    private(set) var playerOrder: [String] = []           // urutan kemunculan player_id
-
-    // Simpan settings terakhir untuk replay
+    private var playerNames: [String: String] = [:]
+    private(set) var playerOrder: [String] = []
     private(set) var lastURL: URL?
 
     override init() {
@@ -228,6 +256,24 @@ class GameSocketService: NSObject, ObservableObject {
         connectionState = .disconnected
     }
 
+    /// Kirim jawaban deduction ke server
+    func sendDeduction(answer: String) {
+        guard connectionState == .connected else {
+            Log.error("Cannot send deduction — not connected")
+            return
+        }
+        let payload: [String: String] = ["type": "deduction", "answer": answer]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let jsonString = String(data: data, encoding: .utf8) else { return }
+
+        Log.ws("Sending deduction: \(answer)")
+        webSocketTask?.send(.string(jsonString)) { error in
+            if let error = error {
+                Log.error("Send deduction failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // MARK: - Private
 
     private func reset() {
@@ -236,9 +282,11 @@ class GameSocketService: NSObject, ObservableObject {
         playerOrder = []
         DispatchQueue.main.async {
             self.events = []
+            self.discoveries = []
             self.currentState = nil
             self.gameResult = nil
             self.setup = nil
+            self.deductionPrompt = nil
         }
     }
 
@@ -259,9 +307,8 @@ class GameSocketService: NSObject, ObservableObject {
 
             case .failure(let error):
                 let nsError = error as NSError
-                let normalCodes = [57, 54]
-                if normalCodes.contains(nsError.code) {
-                    Log.ws("Socket closed by server (code \(nsError.code)) — normal")
+                if [57, 54].contains(nsError.code) {
+                    Log.ws("Socket closed by server — normal")
                     DispatchQueue.main.async { self.connectionState = .disconnected }
                 } else {
                     Log.error("Receive failed [\(nsError.code)]: \(error.localizedDescription)")
@@ -275,8 +322,6 @@ class GameSocketService: NSObject, ObservableObject {
 
     private func handleRawMessage(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
-
-        // Peek tipe pesan dulu
         guard let meta = try? decoder.decode(BackendMessage.self, from: data) else {
             Log.error("Cannot read message type: \(text.prefix(100))")
             return
@@ -285,16 +330,11 @@ class GameSocketService: NSObject, ObservableObject {
         Log.parse("type=\(meta.type) kind=\(meta.kind ?? "-")")
 
         switch meta.type {
-        case "event":
-            handleEventMessage(data, raw: text)
-        case "state":
-            handleStateMessage(data)
-        case "result":
-            handleResultMessage(data)
-        case "setup":
-            handleSetupMessage(data, raw: text)
-        default:
-            Log.error("Unknown message type: \(meta.type)")
+        case "event":  handleEventMessage(data, raw: text)
+        case "state":  handleStateMessage(data)
+        case "result": handleResultMessage(data)
+        case "setup":  handleSetupMessage(data, raw: text)
+        default:       Log.error("Unknown message type: \(meta.type)")
         }
     }
 
@@ -302,7 +342,7 @@ class GameSocketService: NSObject, ObservableObject {
         do {
             let backendEvent = try decoder.decode(BackendEvent.self, from: data)
             let resolvedName = playerNames[backendEvent.actorId ?? ""] ?? backendEvent.actorId
-        let event = GameEvent.from(backendEvent, resolvedName: resolvedName, playerOrder: playerOrder)
+            let event = GameEvent.from(backendEvent, resolvedName: resolvedName, playerOrder: playerOrder)
             Log.event("kind=\(event.kind.rawValue) player=\(event.player ?? "nil") text=\(event.text.prefix(60))")
 
             DispatchQueue.main.async {
@@ -310,22 +350,31 @@ class GameSocketService: NSObject, ObservableObject {
                 case .prompt, .planner, .decision:
                     break
 
+                case .discovery:
+                    // Simpan ke evidence log
+                    self.discoveries.append(event)
+                    self.events.append(event)
+
+                case .humanDeduction:
+                    // Trigger deduction UI
+                    let eventData = backendEvent.data
+                    let prompt = DeductionPrompt(
+                        question: eventData?.question ?? event.text,
+                        attempt:  eventData?.attempt ?? 1,
+                        maxAttempts: eventData?.maxAttempts ?? 3,
+                        hint: eventData?.hint ?? ""
+                    )
+                    self.deductionPrompt = prompt
+                    Log.event("Human deduction triggered: \(prompt.question)")
+
                 case .system:
-                    // Skip internal orchestrator messages
                     let text = event.text
                     let skipPrefixes = [
-                        "(progress gate)",
-                        "(planner override)",
-                        "(loop avoided)",
-                        "(policy gate)",
-                        "(stall gate)",
-                        "CRITICAL:",
-                        "OUT-OF-POLICY",
-                        "STALL MODE",
-                        "📋 Shared plan"
+                        "(progress gate)", "(planner override)", "(loop avoided)",
+                        "(policy gate)", "(stall gate)", "CRITICAL:",
+                        "OUT-OF-POLICY", "STALL MODE", "📋 Shared plan"
                     ]
-                    let shouldSkip = skipPrefixes.contains { text.hasPrefix($0) }
-                    if !shouldSkip {
+                    if !skipPrefixes.contains(where: { text.hasPrefix($0) }) {
                         self.events.append(event)
                     }
 
@@ -343,16 +392,11 @@ class GameSocketService: NSObject, ObservableObject {
             let snapshot = try decoder.decode(GameStateSnapshot.self, from: data)
             let playerInfo = snapshot.players.map { "\($0.name)@\($0.room)" }.joined(separator: ", ")
             Log.state("Turn \(snapshot.turn) | \(playerInfo) | Objects: \(snapshot.objects.count)")
-            // Simpan mapping id → nama, dan urutan kemunculan
             for player in snapshot.players {
                 playerNames[player.id] = player.name
-                if !playerOrder.contains(player.id) {
-                    playerOrder.append(player.id)
-                }
+                if !playerOrder.contains(player.id) { playerOrder.append(player.id) }
             }
-            DispatchQueue.main.async {
-                self.currentState = snapshot
-            }
+            DispatchQueue.main.async { self.currentState = snapshot }
         } catch {
             Log.error("Failed to decode state: \(error)")
         }
@@ -362,16 +406,14 @@ class GameSocketService: NSObject, ObservableObject {
         do {
             let result = try decoder.decode(BackendResult.self, from: data)
             Log.event("Result — won:\(result.won) turns:\(result.turns) reason:\(result.reason)")
-
             let emoji = result.won ? "🎉" : "💀"
             let reasonLabel: String
             switch result.reason {
             case "escaped":    reasonLabel = "The team escaped!"
-            case "turn_limit": reasonLabel = "Turn limit reached (\(result.turns) turns). The team did not escape."
+            case "turn_limit": reasonLabel = "Turn limit reached (\(result.turns) turns)."
             case "stalled":    reasonLabel = "The team got stuck after \(result.turns) turns."
             default:           reasonLabel = result.reason
             }
-
             DispatchQueue.main.async {
                 self.gameResult = GameResult(won: result.won, turns: result.turns, reason: result.reason)
                 self.events.append(.synthetic(kind: .result, text: "\(emoji) Game Over — \(reasonLabel)"))
@@ -383,13 +425,25 @@ class GameSocketService: NSObject, ObservableObject {
 
     private func handleSetupMessage(_ data: Data, raw: String) {
         Log.event("Setup received")
-        // Setup bisa punya berbagai struktur — ambil text kalau ada
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let text = json["text"] as? String ?? json["message"] as? String {
-            DispatchQueue.main.async {
-                self.setup = GameSetup(scenario: text)
-                self.events.append(.synthetic(kind: .setup, text: "🎮 \(text)"))
-            }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        // Parse suspects
+        var suspects: [SuspectInfo] = []
+        if let suspectsData = try? JSONSerialization.data(withJSONObject: json["suspects"] as? [[String: Any]] ?? []) {
+            suspects = (try? decoder.decode([SuspectInfo].self, from: suspectsData)) ?? []
+        }
+
+        let scenario = json["scenario"] as? String
+        let deductionQuestion = json["deduction_question"] as? String
+        let text = scenario ?? json["text"] as? String ?? json["message"] as? String ?? ""
+
+        DispatchQueue.main.async {
+            self.setup = GameSetup(
+                scenario: scenario,
+                suspects: suspects,
+                deductionQuestion: deductionQuestion
+            )
+            // Setup tidak ditampilkan di feed — cukup update navigationTitle
         }
     }
 }
@@ -413,18 +467,15 @@ extension GameSocketService: URLSessionWebSocketDelegate {
         Log.ws("Connection closed — code: \(closeCode.rawValue), reason: \(reasonStr)")
         DispatchQueue.main.async {
             switch closeCode {
-            case .normalClosure, .goingAway:
-                self.connectionState = .disconnected
-            default:
-                self.connectionState = .error("Closed unexpectedly (code \(closeCode.rawValue))")
+            case .normalClosure, .goingAway: self.connectionState = .disconnected
+            default: self.connectionState = .error("Closed unexpectedly (code \(closeCode.rawValue))")
             }
         }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error {
-            let nsError = error as NSError
-            Log.error("Task error [\(nsError.code)]: \(error.localizedDescription)")
+            Log.error("Task error: \(error.localizedDescription)")
         } else {
             Log.ws("Task completed normally")
         }

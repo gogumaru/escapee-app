@@ -8,9 +8,6 @@
 
 import SwiftUI
 
-// ContentView untuk branch visual-novel
-// Ganti GameFeedView → VNGameView
-
 struct ContentView: View {
     @StateObject private var vm = GameViewModel()
     @StateObject private var settings = SettingsStore()
@@ -25,6 +22,9 @@ struct ContentView: View {
                     .background(Color.black.ignoresSafeArea())
             case .setup, .playing, .finished:
                 VNGameView(gameVM: vm)
+                    .ignoresSafeArea()
+            case .deduction:
+                DeductionView(gameVM: vm)
                     .ignoresSafeArea()
             case .error(let msg):
                 ErrorView(message: msg) { vm.stopGame() }

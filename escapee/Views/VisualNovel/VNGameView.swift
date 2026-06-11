@@ -41,6 +41,19 @@ struct VNGameView: View {
             }
             .allowsHitTesting(false)
 
+            // Gradient atas — cover navbar area
+            VStack {
+                LinearGradient(
+                    colors: [Color.black.opacity(0.7), Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 120)
+                .ignoresSafeArea()
+                Spacer()
+            }
+            .allowsHitTesting(false)
+
             // Karakter — sembunyikan saat narasi & result
             if showCharacter,
                let speakerId = vnVM.activeCharacters.first,
@@ -72,11 +85,21 @@ struct VNGameView: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 28)
 
-                } else if vnVM.currentEventType == .narration || vnVM.currentEventType == .system {
-                    // Narasi & progress — di atas
+                } else if vnVM.currentEventType == .narration {
+                    // Narasi — di atas
                     VNDialogView(vnVM: vnVM, gameVM: gameVM)
                         .padding(.horizontal, 14)
-                        .padding(.top, 8)
+                        .padding(.top, 12)
+                    Spacer()
+                    VNControlsView(vnVM: vnVM)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 28)
+
+                } else if vnVM.currentEventType == .system {
+                    // System — di atas
+                    VNDialogView(vnVM: vnVM, gameVM: gameVM)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 12)
                     Spacer()
                     VNControlsView(vnVM: vnVM)
                         .padding(.horizontal, 20)
@@ -87,7 +110,7 @@ struct VNGameView: View {
                     Spacer()
                     VNDialogView(vnVM: vnVM, gameVM: gameVM)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, 84)
+                        .padding(.bottom, 8)
                     VNControlsView(vnVM: vnVM)
                         .padding(.horizontal, 20)
                         .padding(.bottom, 28)
@@ -129,7 +152,7 @@ struct VNNavBar: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(gameVM.navigationTitle)
+                Text("Escapee")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.9))
                 HStack(spacing: 5) {
