@@ -41,6 +41,7 @@ class GameViewModel: ObservableObject {
     @Published var setup: GameSetup?
     @Published var deductionPrompt: DeductionPrompt?
     @Published var discoveries: [GameEvent] = []
+    @Published var lastNarration: String? = nil
     @Published var activeFilter: FeedFilter = .all { didSet { applyFilter() } }
 
     var connectionLabel: String { service.connectionState.label }
@@ -83,6 +84,7 @@ class GameViewModel: ObservableObject {
         setup = nil
         deductionPrompt = nil
         discoveries = []
+        lastNarration = nil
     }
 
     func replayGame() {
@@ -95,9 +97,19 @@ class GameViewModel: ObservableObject {
 
     func setFilter(_ filter: FeedFilter) { activeFilter = filter }
 
-    /// Kirim jawaban deduction
     func submitDeduction(answer: String) {
         service.sendDeduction(answer: answer)
+    }
+
+    func loadDebugSession(events: [GameEvent], suspects: [SuspectInfo],
+                          discoveries: [GameEvent], prompt: DeductionPrompt) {
+        stopGame()
+        allEvents = events
+        filteredEvents = events
+        self.discoveries = discoveries
+        self.setup = GameSetup(scenario: nil, suspects: suspects, deductionQuestion: prompt.question)
+        self.deductionPrompt = prompt
+        self.phase = .deduction
     }
 
     // MARK: - Bind Service
@@ -120,13 +132,17 @@ class GameViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$currentState)
 
+        service.$lastNarration
+            .receive(on: RunLoop.main)
+            .assign(to: &$lastNarration)
+
         service.$gameResult
             .receive(on: RunLoop.main)
             .sink { [weak self] result in
                 guard let self else { return }
                 self.gameResult = result
                 if result != nil {
-                    self.phase = .playing
+                    self.phase = .finished
                 }
             }
             .store(in: &cancellables)
@@ -149,6 +165,7 @@ class GameViewModel: ObservableObject {
                 if prompt != nil {
                     self.deductionPrompt = prompt
                     self.phase = .deduction
+                    DebugSession.save(from: self)
                 }
             }
             .store(in: &cancellables)

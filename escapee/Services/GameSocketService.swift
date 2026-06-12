@@ -83,7 +83,7 @@ struct BackendResult: Decodable {
 
 // MARK: - Suspect & Deduction models
 
-struct SuspectInfo: Decodable, Identifiable {
+struct SuspectInfo: Codable, Identifiable {
     var id: String { name }
     let name: String
     let connectionToVictim: String?
@@ -93,6 +93,12 @@ struct SuspectInfo: Decodable, Identifiable {
         case name
         case connectionToVictim = "connection_to_victim"
         case apparentMotive     = "apparent_motive"
+    }
+
+    init(name: String, connectionToVictim: String?, apparentMotive: String?) {
+        self.name = name
+        self.connectionToVictim = connectionToVictim
+        self.apparentMotive = apparentMotive
     }
 }
 
@@ -199,6 +205,7 @@ class GameSocketService: NSObject, ObservableObject {
     @Published var setup: GameSetup?
     @Published var deductionPrompt: DeductionPrompt?
     @Published var connectionState: ConnectionState = .disconnected
+    @Published var lastNarration: String? = nil
 
     enum ConnectionState: Equatable {
         case disconnected, connecting, connected
@@ -377,6 +384,10 @@ class GameSocketService: NSObject, ObservableObject {
                     if !skipPrefixes.contains(where: { text.hasPrefix($0) }) {
                         self.events.append(event)
                     }
+
+                case .narration:
+                    self.lastNarration = event.text
+                    self.events.append(event)
 
                 default:
                     self.events.append(event)

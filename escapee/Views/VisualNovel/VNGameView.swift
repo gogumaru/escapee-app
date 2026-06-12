@@ -10,13 +10,8 @@ import SwiftUI
 
 struct VNGameView: View {
     @ObservedObject var gameVM: GameViewModel
-    @StateObject private var vnVM: VNGameViewModel
+    @ObservedObject var vnVM: VNGameViewModel
     @State private var showStatePanel = false
-
-    init(gameVM: GameViewModel) {
-        self.gameVM = gameVM
-        self._vnVM = StateObject(wrappedValue: VNGameViewModel(gameViewModel: gameVM))
-    }
 
     private var showCharacter: Bool {
         vnVM.currentEventType != .narration && vnVM.currentEventType != .result
@@ -121,6 +116,7 @@ struct VNGameView: View {
             StatePanelView(state: gameVM.currentState)
                 .presentationDetents([.medium, .large])
         }
+        .onAppear { vnVM.bind(to: gameVM) }
     }
 }
 
@@ -168,6 +164,21 @@ struct VNNavBar: View {
             Spacer()
 
             HStack(spacing: 12) {
+                if gameVM.deductionPrompt != nil {
+                    Button(action: { gameVM.phase = .deduction }) {
+                        HStack(spacing: 4) {
+                            Text("Deduction")
+                                .font(.system(size: 12, weight: .medium))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(Color.orange.opacity(0.9))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.orange.opacity(0.15))
+                        .clipShape(Capsule())
+                    }
+                }
                 Button(action: onShowState) {
                     Image(systemName: "map")
                         .font(.system(size: 17))

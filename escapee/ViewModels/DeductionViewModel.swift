@@ -16,8 +16,9 @@ class DeductionViewModel: ObservableObject {
     @Published var showEvidence = false
     @Published var isSubmitting = false
     @Published var lastHint: String = ""
+    @Published var currentPrompt: DeductionPrompt
 
-    let prompt: DeductionPrompt
+    var prompt: DeductionPrompt { currentPrompt }
     let suspects: [SuspectInfo]
     let discoveries: [GameEvent]
 
@@ -29,11 +30,20 @@ class DeductionViewModel: ObservableObject {
         discoveries: [GameEvent],
         onSubmit: @escaping (String) -> Void
     ) {
-        self.prompt = prompt
+        self.currentPrompt = prompt
         self.suspects = suspects
         self.discoveries = discoveries
         self.onSubmit = onSubmit
         self.lastHint = prompt.hint
+    }
+
+    func updatePrompt(_ prompt: DeductionPrompt) {
+        currentPrompt = prompt
+        if !prompt.hint.isEmpty {
+            lastHint = prompt.hint
+        }
+        isSubmitting = false
+        selectedSuspect = nil
     }
 
     var canSubmit: Bool { selectedSuspect != nil && !isSubmitting }

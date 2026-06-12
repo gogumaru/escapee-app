@@ -10,12 +10,15 @@ import SwiftUI
 struct SetupView: View {
     @ObservedObject var vm: GameViewModel
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var vnVM: VNGameViewModel
     @StateObject private var personaVM = PersonaViewModel()
     @State private var showPersonaPicker = false
     @State private var showSettings = false
 
     var body: some View {
         ZStack {
+            Color.black.ignoresSafeArea()
+
             // Gear icon top right
             VStack {
                 HStack {
@@ -23,7 +26,7 @@ struct SetupView: View {
                     Button(action: { showSettings.toggle() }) {
                         Image(systemName: "gearshape")
                             .font(.system(size: 18))
-                            .foregroundStyle(Color.secondary)
+                            .foregroundStyle(Color.white.opacity(0.35))
                             .padding(16)
                     }
                 }
@@ -41,11 +44,11 @@ struct SetupView: View {
 
                     Text("escapee")
                         .font(.system(size: 38, weight: .medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.white.opacity(0.9))
 
                     Text("The agents need you.\nWill you make it out?")
                         .font(.system(size: 14))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(Color.white.opacity(0.35))
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
@@ -56,6 +59,7 @@ struct SetupView: View {
                 VStack(spacing: 10) {
                     // Start
                     Button {
+                        vnVM.reset()
                         if let url = personaVM.buildWebSocketURL(
                             host: settings.host,
                             port: settings.port,
@@ -75,10 +79,39 @@ struct SetupView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Color.primary)
-                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .background(Color.white)
+                        .foregroundStyle(Color.black)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
+
+                    // Debug: jump to deduction
+                    #if DEBUG
+                    Button {
+                        vnVM.reset()
+                        if let session = DebugSession.load() {
+                            session.apply(to: vm)
+                            vnVM.bind(to: vm)
+                        } else {
+                            vm.phase = .deduction
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "ant")
+                                .font(.system(size: 14))
+                            Text(DebugSession.load() != nil ? "Debug: Last Deduction" : "Debug: Deduction")
+                                .font(.system(size: 14))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(Color.orange.opacity(0.12))
+                        .foregroundStyle(Color.orange.opacity(0.8))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(Color.orange.opacity(0.2), lineWidth: 0.5)
+                        )
+                    }
+                    #endif
 
                     // Choose agents
                     Button {
@@ -97,12 +130,12 @@ struct SetupView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
-                        .background(Color.secondary.opacity(0.1))
-                        .foregroundStyle(Color.secondary)
+                        .background(Color.white.opacity(0.07))
+                        .foregroundStyle(Color.white.opacity(0.45))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
+                                .stroke(Color.white.opacity(0.12), lineWidth: 0.5)
                         )
                     }
                 }

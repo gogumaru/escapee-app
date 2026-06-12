@@ -27,7 +27,11 @@ class VNGameViewModel: ObservableObject {
 
     // MARK: - Init
 
-    init(gameViewModel: GameViewModel) {
+    init() {}
+
+    func bind(to gameViewModel: GameViewModel) {
+        cancellables.removeAll()
+
         gameViewModel.$filteredEvents
             .receive(on: RunLoop.main)
             .sink { [weak self] events in
@@ -58,6 +62,18 @@ class VNGameViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    func reset() {
+        cancellables.removeAll()
+        autoPlayTask?.cancel()
+        autoPlayTask = nil
+        isAutoPlay = false
+        currentIndex = 0
+        currentEvent = nil
+        allEvents = []
+        activeCharacters = []
+        currentRoom = ""
     }
 
     // MARK: - Navigation
@@ -94,6 +110,19 @@ class VNGameViewModel: ObservableObject {
         currentEvent = allEvents[targetIndex]
     }
 
+    func jumpToLast() {
+        guard !allEvents.isEmpty else { return }
+        let lastAnchor = (0..<allEvents.count).reversed().first { isAnchor(allEvents[$0]) }
+        let target = lastAnchor ?? allEvents.count - 1
+        if currentIndex + 1 <= target {
+            for i in (currentIndex + 1)...target {
+                updateCharacter(for: allEvents[i])
+            }
+        }
+        currentIndex = target
+        currentEvent = allEvents[target]
+    }
+
     func prevEvent() {
         // Cari anchor sebelumnya
         let prevAnchorIndex = (0..<currentIndex).reversed()
@@ -107,13 +136,13 @@ class VNGameViewModel: ObservableObject {
     }
 
     var hasNext: Bool {
-        guard currentIndex + 1 < allEvents.count else { return false }
+        guard currentIndex < allEvents.count, currentIndex + 1 < allEvents.count else { return false }
         return (currentIndex + 1..<allEvents.count).contains { isAnchor(allEvents[$0]) }
     }
 
     var hasPrev: Bool {
-        guard currentIndex > 0 else { return false }
-        return (0..<currentIndex).contains { isAnchor(allEvents[$0]) }
+        guard currentIndex > 0, currentIndex <= allEvents.count else { return false }
+        return (0..<min(currentIndex, allEvents.count)).contains { isAnchor(allEvents[$0]) }
     }
 
     // MARK: - Auto Play

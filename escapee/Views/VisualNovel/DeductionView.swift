@@ -10,10 +10,12 @@ import SwiftUI
 
 struct DeductionView: View {
     @ObservedObject var gameVM: GameViewModel
+    @ObservedObject var vnVM: VNGameViewModel
     @StateObject private var vm: DeductionViewModel
 
-    init(gameVM: GameViewModel) {
+    init(gameVM: GameViewModel, vnVM: VNGameViewModel) {
         self.gameVM = gameVM
+        self.vnVM = vnVM
         let prompt = gameVM.deductionPrompt ?? DeductionPrompt(
             question: "Who is the murderer?",
             attempt: 1, maxAttempts: 3, hint: ""
@@ -32,9 +34,12 @@ struct DeductionView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Back button — sits in safe area naturally
+                    // Back button
                     HStack {
-                        Button(action: { gameVM.phase = .playing }) {
+                        Button(action: {
+                            vnVM.jumpToLast()
+                            gameVM.phase = .playing
+                        }) {
                             Image(systemName: "arrow.left")
                                 .font(.system(size: 17))
                                 .foregroundStyle(Color.white.opacity(0.5))
@@ -155,6 +160,11 @@ struct DeductionView: View {
         .sheet(isPresented: $vm.showEvidence) {
             EvidenceSheet(discoveries: vm.discoveries)
                 .presentationDetents([.medium, .large])
+        }
+        .onChange(of: gameVM.deductionPrompt?.attempt) { _ in
+            if let prompt = gameVM.deductionPrompt {
+                vm.updatePrompt(prompt)
+            }
         }
     }
 }
